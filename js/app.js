@@ -206,4 +206,3 @@ document.addEventListener('change', async e => {
 window.addEventListener('hashchange', render);
 render();
 if (sb) sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') { me = null; } });
-EOF
