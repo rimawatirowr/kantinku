@@ -1,3 +1,4 @@
+cat > js/app.js <<'EOF'
 const C = window.KANTINKU_CONFIG || {};
 const CONFIGURED = C.SUPABASE_URL && !C.SUPABASE_URL.startsWith('ISI_');
 const sb = CONFIGURED ? supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;
@@ -14,6 +15,18 @@ let me = null, cart = {w: null, items: {}};
 
 function toast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 2400); }
 const fail = e => { console.error(e); toast(e.message || 'Terjadi kesalahan'); };
+
+/* ---------- Unggah foto ke Supabase Storage ---------- */
+async function uploadFoto(file) {
+  if (!file) return null;
+  if (!file.type.startsWith('image/')) throw new Error('File harus berupa gambar');
+  if (file.size > 2 * 1024 * 1024) throw new Error('Ukuran foto maksimal 2 MB');
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${me.id}/${Date.now()}.${ext}`;
+  const {error} = await sb.storage.from('menu').upload(path, file, {contentType: file.type});
+  if (error) throw error;
+  return sb.storage.from('menu').getPublicUrl(path).data.publicUrl;
+}
 
 function shell(title, sub, body, img = 'plate') {
   const here = (location.hash.slice(2).split('/')[0]) || '';
@@ -34,7 +47,7 @@ function authView(mode = 'masuk') {
 }
 function setupView() {
   $app.innerHTML = `<section class="hero"><h1>KantinKu</h1><p>Website sudah jalan, tinggal disambungkan ke Supabase.</p></section>
-  <section class="sheet"><div class="card"><b>Langkah berikutnya</b><p class="mut">Buka <code>js/config.js</code>, isi <code>SUPABASE_URL</code> dan <code>SUPABASE_ANON_KEY</code>, lalu muat ulang halaman. Panduan lengkap ada di README.md.</p></div></section>`;
+  <section class="sheet"><div class="card"><b>Langkah berikutnya</b><p class="mut">Buka <code>js/config.js</code>, isi <code>SUPABASE_URL</code> dan <code>SUPABASE_ANON_KEY</code>, lalu muat ulang halaman.</p></div></section>`;
 }
 
 /* ---------- Mahasiswa ---------- */
@@ -43,7 +56,7 @@ async function homeView() {
   const open = data.filter(w => w.buka).length;
   shell('Mau makan apa hari ini?', `Selamat datang, ${me.nama || 'teman'}`, `
     <input id="q" placeholder="Cari warung atau menu" data-a="cari"><div class="row"><b>Warung di kantin</b><span class="mut">${open} warung buka</span></div>
-    <div id="list">${data.map(w => `<a class="card row" data-n="${esc((w.nama + ' ' + w.deskripsi).toLowerCase())}" href="#/warung/${w.id}" style="text-decoration:none;color:inherit;margin-bottom:10px">
+    <div id="list">${data.map(w => `<a class="card row" data-n="${esc(((w.nama || '') + ' ' + (w.deskripsi || '')).toLowerCase())}" href="#/warung/${w.id}" style="text-decoration:none;color:inherit;margin-bottom:10px">
       <div class="row" style="justify-content:flex-start"><div class="av">${esc(w.nama.replace('Warung ', '')[0])}</div><div><b>${esc(w.nama)}</b><div class="mut">${esc(w.deskripsi)}</div><div class="mut">${w.buka ? 'Buka' : 'Tutup'} · ${esc(w.jam)}</div></div></div></a>`).join('')}</div>`);
 }
 async function warungView(id) {
@@ -53,7 +66,7 @@ async function warungView(id) {
   const n = cart.w == id ? Object.values(cart.items).reduce((a, i) => a + i.qty, 0) : 0;
   const tot = cart.w == id ? Object.values(cart.items).reduce((a, i) => a + i.qty * i.harga, 0) : 0;
   shell(w.nama, `${w.buka ? 'Buka' : 'Tutup'} · ${w.jam}`, `<a href="#/" class="mut">← Semua warung</a>` + m.map(i => `<div class="card row" style="${i.tersedia ? '' : 'opacity:.55'}">
-    <div><b>${esc(i.nama)}</b><div class="mut">${esc(i.deskripsi)}</div><b style="color:var(--b)">${rp(i.harga)}</b></div>
+    <div class="row" style="justify-content:flex-start;gap:10px">${i.foto_url ? `<img class="thumb" src="${esc(i.foto_url)}" alt="">` : ''}<div><b>${esc(i.nama)}</b><div class="mut">${esc(i.deskripsi)}</div><b style="color:var(--b)">${rp(i.harga)}</b></div></div>
     ${i.tersedia ? `<div class="qty"><button class="m" data-a="kurang" data-w="${id}" data-i='${esc(JSON.stringify({id: i.id, nama: i.nama, harga: i.harga}))}'>−</button><span>${qty(i.id)}</span><button data-a="tambah" data-w="${id}" data-i='${esc(JSON.stringify({id: i.id, nama: i.nama, harga: i.harga}))}'>+</button></div>` : '<span class="badge">Habis</span>'}</div>`).join('')
     + (n ? `<a class="btn bar row" href="#/keranjang"><span>Lihat keranjang · ${n} item</span><span>${rp(tot)}</span></a>` : ''), 'tea');
 }
@@ -87,8 +100,13 @@ async function menuAdminView() {
   shell('Kelola menu', ws.map(w => w.nama).join(', '), `<div class="card"><b>Tambah menu</b>
     <label>Warung</label><select id="mw">${ws.map(w => `<option value="${w.id}">${esc(w.nama)}</option>`).join('')}</select>
     <label>Nama</label><input id="mn"><label>Harga (Rp)</label><input id="mh" type="number" min="0"><label>Kategori</label><select id="mk"><option>Makanan berat</option><option>Minuman</option><option>Snack</option></select>
+    <label>Foto menu (opsional)</label><input id="mf" type="file" accept="image/*">
     <button class="btn full" style="margin-top:10px" data-a="addmenu">Simpan menu</button></div>` +
-    m.map(i => `<div class="card row"><div><b>${esc(i.nama)}</b><div class="mut">${rp(i.harga)} · ${esc(i.kategori)}</div></div><button class="btn sm ${i.tersedia ? 'o' : ''}" data-a="stok" data-id="${i.id}" data-v="${i.tersedia}">${i.tersedia ? 'Tandai habis' : 'Tersedia lagi'}</button></div>`).join(''), 'plate');
+    m.map(i => `<div class="card"><div class="row"><div class="row" style="justify-content:flex-start;gap:10px">
+      ${i.foto_url ? `<img class="thumb" src="${esc(i.foto_url)}" alt="">` : '<div class="thumb"></div>'}
+      <div><b>${esc(i.nama)}</b><div class="mut">${rp(i.harga)} · ${esc(i.kategori)}</div></div></div>
+      <button class="btn sm ${i.tersedia ? 'o' : ''}" data-a="stok" data-id="${i.id}" data-v="${i.tersedia}">${i.tersedia ? 'Tandai habis' : 'Tersedia lagi'}</button></div>
+      <label style="margin-top:8px">${i.foto_url ? 'Ganti foto' : 'Tambah foto'}</label><input type="file" accept="image/*" data-f="foto" data-id="${i.id}"></div>`).join(''), 'plate');
 }
 async function adminWarungView() {
   const {data} = await sb.from('warung').select('*').order('id');
@@ -166,13 +184,26 @@ document.addEventListener('click', async e => {
     if (a === 'status') { const r = await sb.from('orders').update({status: b.dataset.s}).eq('id', b.dataset.id); if (r.error) throw r.error; return render(); }
     if (a === 'addmenu') {
       if (!v('mn') || v('mh') === '') return toast('Isi nama dan harga');
-      const r = await sb.from('menu').insert({warung_id: v('mw'), nama: v('mn'), harga: +v('mh'), kategori: v('mk')}); if (r.error) throw r.error; toast('Menu disimpan'); return render();
+      b.disabled = true;
+      const foto_url = await uploadFoto(document.getElementById('mf')?.files[0]);
+      const r = await sb.from('menu').insert({warung_id: v('mw'), nama: v('mn'), harga: +v('mh'), kategori: v('mk'), foto_url});
+      if (r.error) throw r.error; toast('Menu disimpan'); return render();
     }
     if (a === 'stok') { await sb.from('menu').update({tersedia: b.dataset.v !== 'true'}).eq('id', b.dataset.id); return render(); }
     if (a === 'addwarung') { if (!v('wn')) return toast('Isi nama warung'); const r = await sb.from('warung').insert({nama: v('wn'), jam: v('wj') || '07.00-15.00'}); if (r.error) throw r.error; return render(); }
     if (a === 'buka') { await sb.from('warung').update({buka: b.dataset.v !== 'true'}).eq('id', b.dataset.id); return render(); }
   } catch (err) { fail(err); b.disabled = false; }
 });
+document.addEventListener('change', async e => {
+  const f = e.target; if (f.dataset.f !== 'foto' || !f.files[0]) return;
+  try {
+    toast('Mengunggah foto...');
+    const url = await uploadFoto(f.files[0]);
+    const r = await sb.from('menu').update({foto_url: url}).eq('id', f.dataset.id);
+    if (r.error) throw r.error; toast('Foto diperbarui'); render();
+  } catch (err) { fail(err); }
+});
 window.addEventListener('hashchange', render);
 render();
 if (sb) sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') { me = null; } });
+EOF
