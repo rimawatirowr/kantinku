@@ -1,4 +1,3 @@
-cat > js/app.js <<'EOF'
 const C = window.KANTINKU_CONFIG || {};
 const CONFIGURED = C.SUPABASE_URL && !C.SUPABASE_URL.startsWith('ISI_');
 const sb = CONFIGURED ? supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY) : null;

@@ -1,4 +1,3 @@
-cat > css/style.css <<'EOF'
 :root{--b:#1d4ed8;--bg:#f5f7fb;--tx:#1f2937;--mut:#6b7280;--ln:#e5e7eb;--card:#fff}
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
