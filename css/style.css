@@ -36,4 +36,4 @@ label{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;l
 .tabs{display:flex;gap:8px}.tabs .btn{flex:1}
 #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;opacity:0;transition:.25s;pointer-events:none;z-index:9}
 #toast.on{opacity:1}
-.thumb{width:60px;height:60px;object-fit:cover;border-radius:10px;background:#eee;flex:none}
+.ft{width:64px;height:64px;object-fit:cover;border-radius:12px;flex:none}
